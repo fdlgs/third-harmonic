@@ -1,0 +1,33 @@
+[package]
+name = "third_harm_gen"
+version = "0.1.0"
+edition = "2024"
+description = "3rd harmonic generation"
+license = "MIT OR Apache-2.0"
+authors = ["fdlgs <fdesloges@hotmail.com>"]
+repository = "https://github.com/fdlgs/third_harm_gen"
+readme = "README.md"
+
+
+[dependencies]
+clap = { version = "4.6.0", features = ["derive"] }
+ndarray = { version = "0.17.2", features = ["rayon"] }
+# rand = { version = "0.10.0", features = ["thread_rng"] }
+rayon = "1.11.0"
+ruviz = { version = "0.4", features = ["ndarray_support", "parallel", "simd"] }
+scirs2 = "0.4.1"
+strum = { version = "0.28.0", features = ["derive"] }
+strum_macros = "0.28"
+
+[lints.clippy]
+pedantic    = { level = "deny", priority = -1 }
+nursery     = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+missing_errors_doc = "allow"
+
+[profile.release]
+opt-level = 3        # Maximize speed (default for release)
+lto = "fat"          # Full Link Time Optimization
+codegen-units = 1    # Single unit for better optimization
+panic = "abort"      # Remove unwinding code
+strip = true         # Automatically strip symbols from the binary

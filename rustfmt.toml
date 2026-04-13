@@ -1,0 +1,8 @@
+# Set the style edition to match your project's Rust edition
+style_edition = "2024"
+
+# Standardizing configuration
+max_width = 105
+# use_small_heuristics = "Max"
+# reorder_imports = true
+newline_style = "Unix"
