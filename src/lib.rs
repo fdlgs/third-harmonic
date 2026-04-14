@@ -16,7 +16,9 @@ use ruviz::prelude::*;
 use scirs2::{
     sparse::{
         AsLinearOperator, linalg::expm_multiply, sparse_diags
-    }, spatial::SpatialPoint, stats::distributions::Poisson
+    }, 
+    spatial::SpatialPoint, 
+    stats::distributions::Poisson
 };
 use std::{ iter::repeat_n, num::NonZeroUsize, thread, time::Instant };
 use strum_macros::EnumIter;
@@ -48,11 +50,23 @@ const ALPHA_SQUARE: u32 =  E_ALPHA_SQUARE as u32;
 // Use PB_TH >= 1 for fock state with pump-mode photon number = ALP_SQ as initial condition
 const PB_TH: f64 = 1e-16;
 
+const MAX_DELTA_T: f64 = 0.000_1;
+const MID_DELTA_T: f64 = MAX_DELTA_T / 2.; //   0.000_05
+const MIN_DELTA_T: f64 = 0.000_01;
 const fn delta_t_of_alpha_square(e_alpha_square: AlphaSquare) -> f64 {
     match e_alpha_square as u32 {
-        ..=1_000 => 0.000_1,
-        5_000.. => 0.000_01,
-        _ => 0.000_05
+        ..=1_000 => MAX_DELTA_T,
+        5_000.. => MIN_DELTA_T,
+        _ => MID_DELTA_T
+    }
+}
+const ROUNDING_DELTA_T: f64 = 1.0 / (MAX_DELTA_T / 100.);   // 1. / 0.000_001 == 1_000_000.0
+trait RoundingT {
+    fn round_t(self) -> Self;
+}
+impl RoundingT for f64 {
+    fn round_t(self) -> Self {
+        (self * ROUNDING_DELTA_T).round() / ROUNDING_DELTA_T
     }
 }
 
@@ -107,20 +121,12 @@ pub fn run( verbose: bool) -> Result<()> {
         }
     }
 
-    let poisson = Poisson::new(f64::from(ALPHA_SQUARE), 1.0)?;
-    let dist = poisson_distribution(&poisson, ALPHA_SQUARE);
-    if verbose { dbg!(&dist); }        
-
-    // Identifying "appropriate indices" in the Poisson distribution Array1.
-    let relevant_idxs = relevant_poisson_distribution_indices(&dist, ALPHA_SQUARE, Some(PB_TH));
-    if verbose { dbg!(&relevant_idxs); }
-
     let start = Instant::now();
-    let evolution = StateEvolution::new(ALPHA_SQUARE, DELTA_T, STEP_CNT, PB_TH, verbose)?;
+    let evolution  = StateEvolution::new(ALPHA_SQUARE, DELTA_T, STEP_CNT, PB_TH, verbose)?;
+    let StateEvolution { available_parallelism, ..} = evolution;
     println!(
-        "StateEvolution::new(alpha_square={ALPHA_SQUARE}) finished on {} cores in {:?}",
-        evolution.available_parallelism(),
-        start.elapsed()
+        "StateEvolution::new(alpha_square={ALPHA_SQUARE}) finished on {available_parallelism} cores in {
+        :?}", start.elapsed()
     );
 
     plot(verbose)?;
@@ -150,18 +156,37 @@ pub fn plot( verbose: bool) -> Result<()> {
     Ok(())
 }
 
+
 /// Returns the Poisson probability mass function (pmf) distribution over (11 x `alpha_square`) points
 /// 
-/// The distribution is built over `mean + 10 x variance` points
+/// The distribution is built over `mean + 10 x variance` points.
+/// Note that "optimised" `scirs2_stats::distributions::poisson::Poisson::pmf()` version `0.4.2` 
+/// [is broken](assets/weird_poisson_results.md). So, we do it by hand for now.
 /// 
 /// ### Parameters
 /// 
 /// - `alpha_square` - non-negative mean and variance of the distribution
 #[must_use]
-pub fn poisson_distribution(poisson: &Poisson<f64>, alpha_square: u32) -> Array1<f64> {
+pub fn poisson_distribution(_poisson: &Poisson<f64>, alpha_square: u32, verbose: bool) -> Array1<f64> {
     // `n` goes from 0 to mean + (10 x variance). Since mean = variance = alpha_square:
-    Array1::<f64>::range(0., 11. * f64::from(alpha_square), 1.)
-        .mapv_into(|v| poisson.pmf(v))
+    let poisson_seeds = Array1::<f64>::range(0., 11. * f64::from(alpha_square), 1.);
+    if verbose { println!("poisson_seeds {poisson_seeds:?}"); }    
+    
+    // "optimised" `scirs2_stats::distributions::poisson::Poisson::pmf()` version 0.4.2 is broken so we do it by hand :
+    let mu = f64::from(alpha_square);
+    let factorial_f64 = |k: f64| -> f64 {
+        // Considering the possible values of AlphaSquare defined above, k is within 0.0..1_100_000.0 
+        // and there will therefore neither be any sign_loss nor relevant possible_truncation
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_possible_truncation)]
+        let k = k as u32;
+        (1..=k).map(f64::from).product()
+    };
+    poisson_seeds.mapv(|k| mu.powf(k) * (-mu).exp() / factorial_f64(k))
+
+    // let poisson_seeds = Array1::<f64>::range(0., 11. * f64::from(alpha_square), 1.);
+    // if verbose { println!("poisson_seeds {poisson_seeds:?}"); }    
+    // poisson_seeds.mapv_into(|v| poisson.pmf(v))
 }
 
 /// Returns the values of `n` whose Poisson `prob(n, mean=alpha_square) > pb_th`. 
@@ -216,10 +241,11 @@ pub fn lower_diagonal_elements_of_hamiltonian_in_subspace_of(num_pump_max: usize
 }
 
 pub struct StateEvolution {
-    available_parallelism: usize,
-    time_ts: Array1::<f64>,
-    states_coeff : Array1::<usize>,
-    states : Array2::<f64>,
+    pub available_parallelism: usize,
+    pub chunk_size: usize,
+    pub time_ts: Array1::<f64>,
+    pub states_coeff : Array1::<usize>,
+    pub states : Array2::<f64>,
 }
 
 impl StateEvolution {
@@ -244,20 +270,23 @@ impl StateEvolution {
     pub fn new(alpha_square: u32, delta_t: f64, step_cnt: u16, pb_th: f64, verbose: bool) -> Result<Self> {
         // Total time of the evolution, dervied from `step_cnt`, chosen to observe
         // the dynamics until the first local maximum in signal-mode population.
-        let end_t = delta_t * f64::from(step_cnt);
+        let end_t = (delta_t * f64::from(step_cnt)).round_t();
+        if verbose { println!("alpha_square {alpha_square}, delta_t {delta_t}, step_cnt {step_cnt}, end_t {end_t}, pb_th {pb_th:e}"); }        
+
         
-        let poisson = Poisson::new(f64::from(alpha_square), 1.0)?;
-        let dist = poisson_distribution(&poisson, alpha_square);
-        if verbose { dbg!(&dist); }        
+        let poisson = Poisson::new(f64::from(alpha_square), 0.0)?;
+        let dist = poisson_distribution(&poisson, alpha_square, verbose);
+        if verbose { println!("poisson.mu {}, poisson.loc {}, dist {dist:?}", poisson.mu, poisson.loc); }        
 
         // Identifying "appropriate indices" in the Poisson distribution Array1.
         let relevant_poisson_idxs = relevant_poisson_distribution_indices(&dist, alpha_square, Some(pb_th));
+        if verbose { dbg!(&relevant_poisson_idxs); }        
+
         // total number states |n-k>_{p} |3k>_{s} over all relevant_poisson_idxs
         let hilbert_space_dim = relevant_poisson_idxs.iter().sum::<usize>() + relevant_poisson_idxs.len();
-        
-        
+        if verbose { dbg!(&hilbert_space_dim); }        
 
-        let (available_parallelism,chunk_size, time_ts) = {
+        let (available_parallelism, chunk_size, time_ts) = {
             let step_cnt = usize::from(step_cnt);
             let available_parallelism = {
                     const NO_AVAILABLE_PARALLELILSM: NonZeroUsize = NonZeroUsize::new(1).expect("1 is not 0");
@@ -267,8 +296,9 @@ impl StateEvolution {
                 };
             (available_parallelism, 
             step_cnt/available_parallelism + usize::from(! step_cnt.is_multiple_of(available_parallelism)),
-            Array1::<f64>::linspace(0., end_t, step_cnt))
+            Array1::<f64>::linspace(0., end_t, step_cnt+1).mapv_into(f64::round_t))
         };
+        if verbose { println!("available_parallelism {available_parallelism}, chunk_size {chunk_size} time_ts {time_ts}");}
 
         // time_ts
         //     // Chunking the simulations reduces the overhead of creating many arrays
@@ -278,6 +308,7 @@ impl StateEvolution {
 
         Ok( Self {
             available_parallelism,
+            chunk_size,
             time_ts,
             states_coeff : Array1::from_shape_vec(hilbert_space_dim, 
                 relevant_poisson_idxs.iter()
@@ -295,8 +326,16 @@ impl StateEvolution {
 
                     let step_start = *steps_chunk.first().expect("always at least one step per chunck");
                     let step_end = *steps_chunk.last().expect("always at least one step per chunck");
-                    let time_ts_chunk = Array1::<f64>::range(delta_t * f64::from(step_start), delta_t * f64::from(step_end), delta_t);
+                    //  Being extra cautious with float operations. Just delta_t * f64::from(step_start) causes errors
+                    let start = (delta_t * f64::from(step_start)).round_t();
+                    let end = (delta_t * f64::from(step_end)).round_t();
+                    let time_ts_chunk = Array1::<f64>::linspace(
+                        start, 
+                        end,
+                        usize::from(step_end - step_start + 1),
+                    ).mapv_into(f64::round_t);
                     let time_ts_chunk_len = time_ts_chunk.len();
+                    // if verbose { println!("step_start {step_start}, step_end {step_end}, step_end-step_start {}, start {start}, end {end}, time_ts_chunk_len {time_ts_chunk_len}, time_ts_chunk {time_ts_chunk}", step_end-step_start); }
             
 
                     //  the `states` array is used to store the state for the local time_ts_chunk
@@ -382,32 +421,19 @@ impl StateEvolution {
                             );
 
                     }
-                    (usize::from(step_start)..usize::from(step_end), states_chunk)
+                    let step_range = usize::from(step_start)..=usize::from(step_end);
+                    if verbose { dbg!(&step_range); }
+                    (states_chunk, step_range)
                 })
-                .reduce(|| (0..0, Array2::<f64>::zeros((usize::from(step_cnt + 1), hilbert_space_dim))),
-                    | (unused, mut states), (step_range, states_chunk)| {
+                .reduce(|| (Array2::<f64>::zeros((usize::from(step_cnt + 1), hilbert_space_dim)), 0..=0),
+                    | (mut states, unused ), (states_chunk, step_range)| {
+                            println!("unused {unused:?}, step_range {step_range:?}");
 
                             states.slice_mut(s![step_range, ..]).assign(&states_chunk);
-                            (unused, states)
-                }).1,
+                            (states, unused)
+                }).0,     // ignore `unused`
             })
     }
 
-    #[must_use]
-    pub const fn available_parallelism(&self) -> usize {
-        self.available_parallelism
-    }
-    #[must_use]
-    pub const fn time_ts(&self) -> &Array1::<f64> {
-        &self.time_ts
-    }
-    #[must_use]
-    pub const fn states_coeff(&self) -> &Array1::<usize> {
-        &self.states_coeff
-    }
-    #[must_use]
-    pub const fn states(&self) -> &Array2::<f64> {
-        &self.states
-    }
 }
 

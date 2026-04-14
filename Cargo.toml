@@ -13,9 +13,9 @@ readme = "README.md"
 clap = { version = "4.6.0", features = ["derive"] }
 ndarray = { version = "0.17.2", features = ["rayon"] }
 # rand = { version = "0.10.0", features = ["thread_rng"] }
-rayon = "1.11.0"
-ruviz = { version = "0.4", features = ["ndarray_support", "parallel", "simd"] }
-scirs2 = "0.4.1"
+rayon = "1.12.0"
+ruviz = { version = "0.4.12", features = ["ndarray_support", "parallel", "simd"] }
+scirs2 = "0.4.2"
 strum = { version = "0.28.0", features = ["derive"] }
 strum_macros = "0.28"
 
