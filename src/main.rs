@@ -8,7 +8,6 @@ pub use third_harm_gen::{
 #[derive(Parser, Debug)]
 #[command(about, long_about = None)]
 struct Args {
-
     /// Verbosity
     #[arg(short, long, default_value_t = false)]
     verbose: bool,

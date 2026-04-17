@@ -2,7 +2,7 @@
 style_edition = "2024"
 
 # Standardizing configuration
-max_width = 105
+max_width = 110
 # use_small_heuristics = "Max"
 # reorder_imports = true
 newline_style = "Unix"
