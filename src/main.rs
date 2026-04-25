@@ -1,5 +1,5 @@
 use clap::Parser;
-pub use third_harm_gen::{
+pub use third_harmonic::{
     run,
     AlphaSquare
 };

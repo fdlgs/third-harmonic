@@ -12,7 +12,6 @@ use ndarray::{
     ArrayView1,
     Array2,
     Zip,
-    // Axis,
     parallel::prelude::*,
     s,
 };
@@ -39,10 +38,10 @@ use strum_macros::EnumIter; // Allows us to use .iter()
 #[derive(Debug, EnumIter, Clone, Copy, PartialEq, Eq)]
 pub enum AlphaSquare {
     //  with pb_th = 1e-16
-    U1e1 = 10, // relevant_poisson_idxs_len =       46:      (0..     45), hilbert_space_dim =       1_081 * 5000 t_step: 0.043 GB
-    U1e2 = 100, // relevant_poisson_idxs_len =     163:     (30..    192), hilbert_space_dim =      18_256 * 500  t_step: 0.073 GB
-    U1e3 = 1_000, // relevant_poisson_idxs_len =   509:    (756..  1_264), hilbert_space_dim =     514_599 * 160  t_step: 0.658 GB
-    U2e3 = 2_000, // relevant_poisson_idxs_len =   717:  (1_652..  2_368), hilbert_space_dim =   1_441_887 * 219  t_step: 2.526 GB
+    U1e1 = 10, // relevant_poisson_idxs_len =       46:      (0..     45), hilbert_space_dim =       1_127 * 5001 t_step: 0.043 GB
+    U1e2 = 100, // relevant_poisson_idxs_len =     163:     (30..    192), hilbert_space_dim =      18_149 * 501  t_step: 0.070 GB
+    U1e3 = 1_000, // relevant_poisson_idxs_len =   509:    (756..  1_264), hilbert_space_dim =     515_708 * 161  t_step: 0.633 GB
+    U2e3 = 2_000, // relevant_poisson_idxs_len =   717:  (1_652..  2_368), hilbert_space_dim =   1_442_604 * 220  t_step: 2.421 GB
     // U1e4 = 10_000, // relevant_poisson_idxs_len = 1_583:  (9_219.. 10_801), hilbert_space_dim =  15_847_413 * 400 t_step: 50.71 GB
     // U1e5 = 100_000, // relevant_poisson_idxs_len = 4_912: (97_554..102_465), hilbert_space_dim = 491_251_576* 160 t_step: 628.8 GB
 }
@@ -573,7 +572,6 @@ macro_rules! f64_best {
     )
 }
 
-
 fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f64, verbose: bool) -> Result<()> {
     let StateEvolution { time_ts, states, states_coeff } = evolution;
     let start = states_coeff[0];
@@ -594,7 +592,6 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
 
     for t_i in 0..dim {
         let phi = &states.slice(s![t_i + offset, ..]);
-        
         // let mmt1000 = moments(1, 0, 0, 0, phi, start, end);
         let mmt1100 = moments(1, 1, 0, 0, phi, start, end);
         let mmt0011 = moments(0, 0, 1, 1, phi, start, end);
@@ -602,16 +599,11 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
 
         pump_population[t_i] = mmt1100;
         signal_population[t_i] = mmt0011;
-
         pump_variance_momentum[t_i] = mmt1100 - mmt2000 + 0.5;
-
         pump_g2[t_i] = moments(2, 2, 0, 0, phi, start, end) / (mmt1100 * mmt1100);
-        // if t_i > 0 {
-            signal_g2[t_i] = moments(0, 0, 2, 2, phi, start, end) / (mmt0011 * mmt0011);
-        // }
+        signal_g2[t_i] = moments(0, 0, 2, 2, phi, start, end) / (mmt0011 * mmt0011);
         ap_vals[t_i] = moments(1, 0, 0, 0, phi, start, end);
     }
-    // signal_g2[0] = signal_g2[1];
 
     let conserved_quantity = 3.0*&pump_population + &signal_population;
     let last_t = time_ts[dim - 1];
@@ -637,7 +629,7 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
         .xlabel(r"time")
         .ylabel(r"Signal population, $\langle N_{s}\rangle$")
         .xlim(0.0, last_t)
-        .ylim(0.0, 40.0)
+        .ylim(0.0, 3.3*f64::from(alpha_square))
         .typst(true);
 
     let plot01 = Plot::new()
@@ -674,7 +666,6 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
         // .ylim(1.0, 2.0)
         .typst(true);
 
-
     subplots(1, 3, 2_000, 600)?
         .subplot(0, 0, plot00.into())?
         .subplot(0, 1, plot01.into())?
@@ -682,17 +673,17 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
         .suptitle("")
         .save(format!("3rdHarmonicGenerationASqr{alpha_square}.png"))?;
 
-
     if verbose {
-        println!("conserved_quantity ({}..{}), pump_variance_momentum ({}..{}), pump g² ({}..{}), signal g² ({}..{})",
+        println!("pump_population ({}..{}),\nsignal_population ({}..{}),\nconserved_quantity ({}..{
+                }),\npump_variance_momentum ({}..{}),\npump g² ({}..{}),\nsignal g² ({}..{})",
+            f64_best!(pump_population, Iterator::min_by)?, f64_best!(pump_population, Iterator::max_by)?,
+            f64_best!(signal_population, Iterator::min_by)?, f64_best!(signal_population, Iterator::max_by)?,
             f64_best!(conserved_quantity, Iterator::min_by)?,
             f64_best!(conserved_quantity, Iterator::max_by)?,
             f64_best!(pump_variance_momentum, Iterator::min_by)?,
             f64_best!(pump_variance_momentum, Iterator::max_by)?,
-            f64_best!(pump_g2, Iterator::min_by)?,
-            f64_best!(pump_g2, Iterator::max_by)?,
-            f64_best!(signal_g2, Iterator::min_by)?,
-            f64_best!(signal_g2, Iterator::max_by)?,
+            f64_best!(pump_g2, Iterator::min_by)?, f64_best!(pump_g2, Iterator::max_by)?,
+            f64_best!(signal_g2, Iterator::min_by)?, f64_best!(signal_g2, Iterator::max_by)?,
         );
         println!("Plot finished in {:?}", start.elapsed());
     }

@@ -1,11 +1,11 @@
 [package]
-name = "third_harm_gen"
+name = "third_harmonic"
 version = "0.1.0"
 edition = "2024"
 description = "3rd harmonic generation"
 license = "MIT OR Apache-2.0"
 authors = ["fdlgs <fdesloges@hotmail.com>"]
-repository = "https://github.com/fdlgs/third_harm_gen"
+repository = "https://github.com/fdlgs/third_harmonic"
 readme = "README.md"
 
 
