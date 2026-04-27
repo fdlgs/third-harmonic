@@ -362,7 +362,7 @@ impl StateEvolution {
         // time_ts.axis_chunks_iter(Axis(0), chunk_size)
 
         if verbose {
-            println!("(unused) chunk_size {}, {} time_ts {time_ts}", chunk_size(step_cnt), time_ts.len(),);
+            println!("(unused) chunk_size {}, {} time_ts {time_ts}", chunk_size(step_cnt), time_ts.len());
         }
 
         let states_filename = format!("assets/3rdHarmGen_a_sqr{alpha_square}_v0.npy");
@@ -615,19 +615,20 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
         .line(time_ts, &pump_population)
             .line_style(LineStyle::Solid)
             .color(Color::new(31, 119, 180))
-            .label(r"$\langle N_{p}\rangle$")
+            .label(r"$angle.l N_p angle.r$")
         .line(time_ts, &signal_population)
             .line_style(LineStyle::Solid)
             .color(Color::BLACK)
-            .label(r"$\langle N_{s}\rangle$")
+            .label(r"$angle.l N_s angle.r$")
         .line(time_ts, &conserved_quantity)
             .line_style(LineStyle::Dashed)
             .color(Color::BLACK)
-            .label(r"$3\langle N_{p}\rangle+\langle N_{s}\rangle$")
-        .legend_best()
+            .label(r"$3 angle.l N_p angle.r + angle.l N_s angle.r$")
+        .legend(Position::Custom{x:0.3, y:0.4})
+        // .legend_best()
         .grid(true)
         .xlabel(r"time")
-        .ylabel(r"Signal population, $\langle N_{s}\rangle$")
+        .ylabel(r"Signal population, $angle.l N_s angle.r$")
         .xlim(0.0, last_t)
         .ylim(0.0, 3.3*f64::from(alpha_square))
         .typst(true);
@@ -639,11 +640,11 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
         .line(&vec![0.0, last_t], &vec![0.5, 0.5])
             .line_style(LineStyle::Dashed)
             .color(Color::RED)
-        .title(format!("$| \\a |^2={alpha_square}$"))    
+        .title(format!("$| alpha |^2={alpha_square}$"))    
         .legend_best()
         .grid(true)
         .xlabel(r"time")
-        .ylabel(r"Variance, $( \D {P_{p}})^2$")
+        .ylabel(r"Variance, $(Delta_(P_p))^2$")
         .xlim(0.0, last_t)
         .ylim(0.35, 0.75)
         .typst(true);
@@ -663,7 +664,6 @@ fn interpret_and_plot(evolution: &StateEvolution, alpha_square: u16, delta_t: f6
         .xlabel(r"time")
         .xlim(-delta_t, last_t)
         .yscale(AxisScale::Log)
-        // .ylim(1.0, 2.0)
         .typst(true);
 
     subplots(1, 3, 2_000, 600)?
