@@ -1,12 +1,9 @@
 use clap::Parser;
-pub use third_harmonic::{
-    run,
-    AlphaSquare
-};
 use color_eyre::eyre::Result;
 use strum::IntoEnumIterator;
+pub use third_harmonic::{AlphaSquare, run};
 
-/// 3rd harmonic generation
+/// Photon population evolution for 3rd harmonic generation
 #[derive(Parser, Debug)]
 #[command(about, long_about = None)]
 struct Args {
@@ -21,15 +18,18 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    AlphaSquare::iter().find(|&e_a_sqr| e_a_sqr as u16 == args.alpha_square)
+    AlphaSquare::iter()
+        .find(|&e_alpha_square| e_alpha_square as u16 == args.alpha_square)
         .map_or_else(
             || {
-                println!("Oups!  -a, --alpha_square <ALPHA_SQUARE>: <ALPHA_SQUARE> must be one of {:?}",
-                        AlphaSquare::iter().map(|e_a_sqr| e_a_sqr as u16).collect::<Vec<_>>());
+                println!(
+                    "Oups!  -a, --alpha_square <ALPHA_SQUARE>: <ALPHA_SQUARE> must be one of {:?}",
+                    AlphaSquare::iter()
+                        .map(|e_alpha_square| e_alpha_square as u16)
+                        .collect::<Vec<_>>()
+                );
                 Ok(())
             },
-            |e_a_sqr| run(e_a_sqr, args.verbose)
+            |e_alpha_square| run(e_alpha_square, args.verbose),
         )
-
-    
 }

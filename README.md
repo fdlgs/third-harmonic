@@ -1,7 +1,24 @@
-# third_harm_gen
+# third_harmonic
 
-Third harmonic generation
+Photon population evolution for 3rd harmonic generation
 
+## Quick Start
+```
+> third_harmonic --help
+Photon population evolution for 3rd harmonic generation
+
+Usage: third_harmonic [OPTIONS]
+
+Options:
+  -v, --verbose                      Verbosity
+  -a, --alpha-square <ALPHA_SQUARE>  Must be one of [10, 100, 1000, 2000] [default: 10]
+  -h, --help                         Print help
+
+> third_harmonic -a 10
+StateEvolution::new(alpha_square=10) finished on 12 cores in 49.248699357s
+Moments extraction and plot finished in 767.717829ms
+```
+![Results for alpha-square = 10](assets/3rdHarmonicGenerationASqr10.png)
 
 ## License
 
