@@ -2,6 +2,8 @@
 
 Photon population evolution for 3rd harmonic generation
 
+Anecdotally, the computation time is reduced in half, at ~ 100s, vs the original code in python that served as model, taking ~ 200 s.
+
 ## Quick Start
 ```
 > third_harmonic --help
